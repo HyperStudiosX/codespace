@@ -1,0 +1,9 @@
+{
+  "name": "hyper-core-bot",
+  "version": "1.0.0",
+  "description": "Hyper Core Discord bot - modular moderation, utility, logging and community tools",
+  "main": "index.js",
+  "scripts": {"start":"node index.js", "deploy":"node deploy-commands.js", "check":"node --check index.js && node --check deploy-commands.js"},
+  "engines": {"node": ">=20.11.0"},
+  "dependencies": {"discord.js":"^14.19.3", "dotenv":"^16.4.7", "pg":"^8.13.1"}
+}

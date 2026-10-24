@@ -1,0 +1,108 @@
+const {
+  SlashCommandBuilder, PermissionFlagsBits, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  StringSelectMenuBuilder, EmbedBuilder
+} = require('discord.js');
+const db = require('../database/store');
+const { embed } = require('../utils/embeds');
+const { emoji } = require('../utils/emoji');
+const { canManage, isOwner } = require('../utils/permissions');
+const config = require('../../config/config');
+
+const commandDefs = [
+ { name:'help', description:'Open the interactive Hyper Core help dashboard', data:new SlashCommandBuilder().setName('help').setDescription('Open the interactive Hyper Core help dashboard') },
+ { name:'ping', description:'Check bot latency', data:new SlashCommandBuilder().setName('ping').setDescription('Check bot latency') },
+ { name:'serverinfo', description:'Show server information', data:new SlashCommandBuilder().setName('serverinfo').setDescription('Show server information') },
+ { name:'userinfo', description:'Show information about a user', data:new SlashCommandBuilder().setName('userinfo').setDescription('Show information about a user').addUserOption(o=>o.setName('user').setDescription('User to inspect')) },
+ { name:'avatar', description:'Show a user avatar', data:new SlashCommandBuilder().setName('avatar').setDescription('Show a user avatar').addUserOption(o=>o.setName('user').setDescription('User')) },
+ { name:'prefix', description:'View or change the server prefix', data:new SlashCommandBuilder().setName('prefix').setDescription('View or change the server prefix').addStringOption(o=>o.setName('value').setDescription('New prefix (leave blank to view)').setMaxLength(5)) },
+ { name:'ban', description:'Ban a member', data:new SlashCommandBuilder().setName('ban').setDescription('Ban a member').setDefaultMemberPermissions(PermissionFlagsBits.BanMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason')) },
+ { name:'kick', description:'Kick a member', data:new SlashCommandBuilder().setName('kick').setDescription('Kick a member').setDefaultMemberPermissions(PermissionFlagsBits.KickMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason')) },
+ { name:'timeout', description:'Timeout a member for minutes', data:new SlashCommandBuilder().setName('timeout').setDescription('Timeout a member').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addIntegerOption(o=>o.setName('minutes').setDescription('Duration in minutes').setRequired(true).setMinValue(1).setMaxValue(40320)).addStringOption(o=>o.setName('reason').setDescription('Reason')) },
+ { name:'untimeout', description:'Remove a member timeout', data:new SlashCommandBuilder().setName('untimeout').setDescription('Remove a member timeout').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)) },
+ { name:'purge', description:'Delete recent messages', data:new SlashCommandBuilder().setName('purge').setDescription('Delete recent messages').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addIntegerOption(o=>o.setName('amount').setDescription('1-100 messages').setRequired(true).setMinValue(1).setMaxValue(100)) },
+ { name:'setup-logs', description:'Configure a logging channel', data:new SlashCommandBuilder().setName('setup-logs').setDescription('Configure a logging channel').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Log channel').addChannelTypes(ChannelType.GuildText).setRequired(true)) },
+ { name:'logs-reset', description:'Disable logging', data:new SlashCommandBuilder().setName('logs-reset').setDescription('Disable logging').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild) },
+ { name:'welcome-setup', description:'Configure welcome messages', data:new SlashCommandBuilder().setName('welcome-setup').setDescription('Configure welcome messages').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Welcome channel').addChannelTypes(ChannelType.GuildText).setRequired(true)) },
+ { name:'automod', description:'Configure basic AutoMod filters', data:new SlashCommandBuilder().setName('automod').setDescription('Configure basic AutoMod filters').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addBooleanOption(o=>o.setName('enabled').setDescription('Enable or disable link/invite filtering').setRequired(true)) },
+ { name:'ticket-panel', description:'Post a ticket panel', data:new SlashCommandBuilder().setName('ticket-panel').setDescription('Post a ticket panel').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Where to post panel').addChannelTypes(ChannelType.GuildText).setRequired(true)) },
+ { name:'ticket-close', description:'Close the current ticket', data:new SlashCommandBuilder().setName('ticket-close').setDescription('Close the current ticket') },
+ { name:'antinuke', description:'Configure basic anti-nuke audit threshold', data:new SlashCommandBuilder().setName('antinuke').setDescription('Configure basic anti-nuke audit threshold').setDefaultMemberPermissions(PermissionFlagsBits.Administrator).addIntegerOption(o=>o.setName('threshold').setDescription('Actions before alert (2-10)').setMinValue(2).setMaxValue(10).setRequired(true)) },
+ { name:'j2c-setup', description:'Set the Join-2-Create voice channel', data:new SlashCommandBuilder().setName('j2c-setup').setDescription('Set the Join-2-Create voice channel').setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild).addChannelOption(o=>o.setName('channel').setDescription('Join-to-create voice channel').addChannelTypes(ChannelType.GuildVoice).setRequired(true)) },
+ { name:'role-add', description:'Add a role to a member', data:new SlashCommandBuilder().setName('role-add').setDescription('Add a role to a member').setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addRoleOption(o=>o.setName('role').setDescription('Role').setRequired(true)) },
+ { name:'role-remove', description:'Remove a role from a member', data:new SlashCommandBuilder().setName('role-remove').setDescription('Remove a role from a member').setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles).addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addRoleOption(o=>o.setName('role').setDescription('Role').setRequired(true)) },
+ { name:'slowmode', description:'Set channel slowmode', data:new SlashCommandBuilder().setName('slowmode').setDescription('Set channel slowmode').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels).addIntegerOption(o=>o.setName('seconds').setDescription('0 to 21600 seconds').setRequired(true).setMinValue(0).setMaxValue(21600)) },
+ { name:'lock', description:'Lock the current text channel', data:new SlashCommandBuilder().setName('lock').setDescription('Lock the current text channel').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels) },
+ { name:'unlock', description:'Unlock the current text channel', data:new SlashCommandBuilder().setName('unlock').setDescription('Unlock the current text channel').setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels) },
+ { name:'poll', description:'Create a yes/no poll', data:new SlashCommandBuilder().setName('poll').setDescription('Create a yes/no poll').addStringOption(o=>o.setName('question').setDescription('Poll question').setRequired(true).setMaxLength(180)) },
+ { name:'say', description:'Send a message as Hyper Core', data:new SlashCommandBuilder().setName('say').setDescription('Send a message as Hyper Core').setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages).addStringOption(o=>o.setName('message').setDescription('Message to send').setRequired(true).setMaxLength(1800)) }
+];
+const moduleData = [
+ {name:'AntiNuke', type:'Core Modules', count:1, commands:['/antinuke — configure audit threshold']},
+ {name:'Moderation', type:'Core Modules', count:10, commands:['/ban','/kick','/timeout','/untimeout','/purge','/role-add','/role-remove','/slowmode','/lock','/unlock']},
+ {name:'AutoMod', type:'Core Modules', count:1, commands:['/automod — invite/link filter toggle']},
+ {name:'Logger', type:'Core Modules', count:2, commands:['/setup-logs','/logs-reset']},
+ {name:'Utility', type:'Core Modules', count:7, commands:['/ping','/serverinfo','/userinfo','/avatar','/prefix','/poll','/say']},
+ {name:'Tickets', type:'Extra Modules', count:3, commands:['/ticket-panel','/ticket-close','button-based ticket creation']},
+ {name:'Welcomer', type:'Extra Modules', count:1, commands:['/welcome-setup']},
+ {name:'Join 2 Create', type:'Extra Modules', count:1, commands:['/j2c-setup']}
+];
+
+function helpPayload(guild) {
+ const e = embed(`${emoji('help',guild)} Hyper Core • Help Dashboard`, 'Select a module below to view its available commands.\n\n**Core Modules** — security, moderation, automod, logs and utilities.\n**Extra Modules** — tickets, welcome and voice tools.', config.colors.primary);
+ e.addFields({name:'Commands',value:String(commandDefs.length),inline:true},{name:'Prefix',value:`\`${config.defaultPrefix}\` (server configurable)`,inline:true},{name:'Modules',value:String(moduleData.length),inline:true});
+ const row = new ActionRowBuilder().addComponents(new StringSelectMenuBuilder().setCustomId('hc_help_module').setPlaceholder('Choose a module').addOptions(moduleData.map(m=>({label:m.name,description:`${m.type} • ${m.count} listed command(s)`,value:m.name}))));
+ return { embeds:[e], components:[row] };
+}
+async function execute(name, ctx) {
+ const { interaction:i, message:m, client } = ctx; const guild = i?.guild || m?.guild; const member = i?.member || m?.member; const user = i?.user || m?.author;
+ const get = (n) => i ? (i.options.get(n)?.user || i.options.get(n)?.role || i.options.get(n)?.channel || i.options.get(n)?.value || i.options.get(n)) : null;
+ const reply = async (payload) => i ? (i.replied||i.deferred ? i.followUp(payload) : i.reply(payload)) : m.reply(payload);
+ const guildId = guild?.id;
+ if (!guild && !['help','ping'].includes(name)) return reply({embeds:[embed('Server only','This command must be used inside a server.',config.colors.error)],ephemeral:true});
+ const settings = guildId ? await db.getGuild(guildId) : {};
+ if (name==='slowmode') { if(!canManage(member)&&!isOwner(user.id)) return reply({content:'You need Manage Channels.',ephemeral:true}); const seconds=i?.options.getInteger('seconds') ?? Number(m?.content.split(/\s+/)[1]); if(!Number.isInteger(seconds)||seconds<0||seconds>21600) return reply({content:'Use a value from 0 to 21600 seconds.',ephemeral:true}); await (i?.channel||m.channel).setRateLimitPerUser(seconds,`Set by ${user.tag}`); return reply({content:`${emoji('success',guild)} Slowmode set to **${seconds} seconds**.`}); }
+ if (name==='lock'||name==='unlock') { if(!canManage(member)&&!isOwner(user.id)) return reply({content:'You need Manage Channels.',ephemeral:true}); const channel=i?.channel||m.channel; await channel.permissionOverwrites.edit(guild.roles.everyone,{SendMessages:name==='lock'?false:null,SendMessagesInThreads:name==='lock'?false:null}, {reason:`${name} by ${user.tag}`}); return reply({content:`${emoji('success',guild)} ${channel} is now **${name==='lock'?'locked':'unlocked'}**.`}); }
+ if (name==='poll') { const question=i?.options.getString('question')||m?.content.replace(/^\S+\s*/,'').trim(); if(!question) return reply({content:'Provide a poll question.',ephemeral:true}); const sent=await (i?.channel||m.channel).send({embeds:[embed('📊 Poll',question)]}); await sent.react('👍'); await sent.react('👎'); return reply({content:`${emoji('success',guild)} Poll created.` ,ephemeral:true}); }
+ if (name==='say') { if(!canManage(member)&&!isOwner(user.id)) return reply({content:'You need Manage Messages.',ephemeral:true}); const text=i?.options.getString('message')||m?.content.split(/\s+/).slice(1).join(' '); if(!text) return reply({content:'Provide a message.',ephemeral:true}); await (i?.channel||m.channel).send({content:text,allowedMentions:{parse:[]}}); return reply({content:`${emoji('success',guild)} Message sent.`,ephemeral:true}); }
+ if (name==='help') return reply(helpPayload(guild));
+ if (name==='ping') return reply({embeds:[embed(`${emoji('online',guild)} Pong!`,`WebSocket: **${client.ws.ping}ms**\nDatabase: **${db.databaseMode()}**`)]});
+ if (name==='prefix') {
+   const value = i ? i.options.getString('value') : m?.content.split(/\s+/)[1];
+   if (!value) return reply({embeds:[embed('Server Prefix',`Current prefix: \`${settings.prefix || config.defaultPrefix}\`\nChange it with \`${settings.prefix || config.defaultPrefix}prefix <new-prefix>\`.`)]});
+   if (!canManage(member) && !isOwner(user.id)) return reply({content:`${emoji('error',guild)} You need **Manage Server** to change the prefix.`,ephemeral:true});
+   if (value.length>5 || /\s/.test(value)) return reply({content:'Prefix must be 1–5 characters with no spaces.',ephemeral:true});
+   await db.setGuild(guildId,{prefix:value}); return reply({content:`${emoji('success',guild)} Prefix updated to \`${value}\`.`});
+ }
+ if (name==='serverinfo') { const owner = await guild.fetchOwner().catch(()=>null); const e=embed(`${guild.name} — Server Info`,''); e.setThumbnail(guild.iconURL({size:256})); e.addFields({name:'Owner',value:owner?.user.tag||'Unknown',inline:true},{name:'Members',value:String(guild.memberCount),inline:true},{name:'Created',value:`<t:${Math.floor(guild.createdTimestamp/1000)}:D>`,inline:true},{name:'Boosts',value:String(guild.premiumSubscriptionCount||0),inline:true},{name:'Channels',value:String(guild.channels.cache.size),inline:true},{name:'Roles',value:String(guild.roles.cache.size),inline:true}); return reply({embeds:[e]}); }
+ if (name==='userinfo') { const u=i?i.options.getUser('user'):(m.mentions.users.first()||user); const mem=await guild.members.fetch(u.id).catch(()=>null); const e=embed(`${u.tag} — User Info`,''); e.setThumbnail(u.displayAvatarURL({size:256})); e.addFields({name:'User ID',value:u.id,inline:true},{name:'Created',value:`<t:${Math.floor(u.createdTimestamp/1000)}:D>`,inline:true},{name:'Joined',value:mem?.joinedTimestamp?`<t:${Math.floor(mem.joinedTimestamp/1000)}:D>`:'Unknown',inline:true}); return reply({embeds:[e]}); }
+ if (name==='avatar') { const u=i?i.options.getUser('user'):(m.mentions.users.first()||user); const e=embed(`${u.tag} — Avatar`,''); e.setImage(u.displayAvatarURL({size:1024,extension:'png'})); return reply({embeds:[e]}); }
+ if (['ban','kick','timeout','untimeout','purge','setup-logs','logs-reset','welcome-setup','automod','ticket-panel','ticket-close','antinuke','j2c-setup','role-add','role-remove'].includes(name)) {
+   const opts = i?.options;
+   const val = (key) => opts ? opts.get(key) : null;
+   const userOpt = (key) => opts?.getUser(key) || (key==='user' ? m?.mentions.users.first() : null);
+   const str = (key) => opts?.getString(key) ?? null;
+   if (['ban','kick','timeout','untimeout','purge','setup-logs','logs-reset','welcome-setup','automod','ticket-panel','antinuke','j2c-setup','role-add','role-remove'].includes(name) && !canManage(member) && !isOwner(user.id)) return reply({content:`${emoji('error',guild)} You need the appropriate server management permission.`,ephemeral:true});
+   if (name==='ban'||name==='kick'||name==='timeout'||name==='untimeout') {
+     const target = userOpt('user'); if (!target) return reply({content:'Please mention a valid user.',ephemeral:true});
+     const targetMember = await guild.members.fetch(target.id).catch(()=>null); if (!targetMember) return reply({content:'That user is not a member of this server.',ephemeral:true});
+     if (target.id===user.id || target.id===client.user.id) return reply({content:'You cannot use this action on yourself or the bot.',ephemeral:true});
+     const reason = str('reason') || 'No reason provided';
+     if (name==='ban') { await targetMember.ban({reason:`${reason} | Moderator: ${user.tag}`}); return reply({content:`${emoji('success',guild)} Banned **${target.tag}**. Reason: ${reason}`}); }
+     if (name==='kick') { await targetMember.kick(`${reason} | Moderator: ${user.tag}`); return reply({content:`${emoji('success',guild)} Kicked **${target.tag}**. Reason: ${reason}`}); }
+     if (name==='timeout') { const mins=opts.getInteger('minutes'); await targetMember.timeout(mins*60000,`${reason} | Moderator: ${user.tag}`); return reply({content:`${emoji('success',guild)} Timed out **${target.tag}** for ${mins} minute(s).`}); }
+     await targetMember.timeout(null,`Timeout removed by ${user.tag}`); return reply({content:`${emoji('success',guild)} Removed timeout from **${target.tag}**.`});
+   }
+   if (name==='purge') { const amount=opts?.getInteger('amount') ?? Number(m?.content.split(/\s+/)[1]); if (!Number.isInteger(amount)||amount<1||amount>100) return reply({content:'Choose an amount between 1 and 100.',ephemeral:true}); if (!m && !member.permissions.has(PermissionFlagsBits.ManageMessages)) return reply({content:'You need Manage Messages.',ephemeral:true}); const targetChannel = i ? i.channel : m.channel; const deleted=await targetChannel.bulkDelete(amount,true); return reply({content:`${emoji('success',guild)} Deleted ${deleted.size} message(s).`,ephemeral:true}); }
+   if (name==='setup-logs') { const channel=opts.getChannel('channel'); await db.setGuild(guildId,{logChannelId:channel.id}); return reply({content:`${emoji('success',guild)} Logging channel set to ${channel}.`}); }
+   if (name==='logs-reset') { await db.setGuild(guildId,{logChannelId:null}); return reply({content:`${emoji('success',guild)} Logging has been disabled.`}); }
+   if (name==='welcome-setup') { const channel=opts.getChannel('channel'); await db.setGuild(guildId,{welcomeChannelId:channel.id}); return reply({content:`${emoji('success',guild)} Welcome channel set to ${channel}.`}); }
+   if (name==='automod') { const enabled=opts.getBoolean('enabled'); await db.setGuild(guildId,{automodEnabled:enabled}); return reply({content:`${emoji('success',guild)} Basic invite/link filtering is now **${enabled?'enabled':'disabled'}**.`}); }
+   if (name==='antinuke') { const threshold=opts.getInteger('threshold'); await db.setGuild(guildId,{antinukeThreshold:threshold,antinukeEnabled:true}); return reply({content:`${emoji('success',guild)} AntiNuke alert threshold set to ${threshold} audit action(s). Note: alerts are heuristic; this does not automatically punish admins.`}); }
+   if (name==='j2c-setup') { const channel=opts.getChannel('channel'); await db.setGuild(guildId,{j2cChannelId:channel.id}); return reply({content:`${emoji('success',guild)} Join-2-Create trigger set to ${channel}.`}); }
+   if (name==='role-add'||name==='role-remove') { const target=opts.getUser('user'); const role=opts.getRole('role'); const mem=await guild.members.fetch(target.id); if (role.managed || role.position>=guild.members.me.roles.highest.position) return reply({content:'I cannot manage that role because of its hierarchy or managed status.',ephemeral:true}); if(name==='role-add') await mem.roles.add(role); else await mem.roles.remove(role); return reply({content:`${emoji('success',guild)} ${name==='role-add'?'Added':'Removed'} ${role} ${name==='role-add'?'to':'from'} ${target}.`}); }
+   if (name==='ticket-panel') { const channel=opts.getChannel('channel'); const e=embed(`${emoji('ticket',guild)} Support Tickets`,'Need help? Click **Create Ticket** and a private support channel will be created for you.'); const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId('hc_ticket_create').setLabel('Create Ticket').setStyle(ButtonStyle.Primary).setEmoji('🎫')); await channel.send({embeds:[e],components:[row]}); return reply({content:`${emoji('success',guild)} Ticket panel posted in ${channel}.`}); }
+   if (name==='ticket-close') { const ticket=await db.getTicket(m?.channelId || i.channelId); if(!ticket) return reply({content:'This channel is not an open Hyper Core ticket.',ephemeral:true}); if(!canManage(member) && ticket.user_id!==user.id && ticket.userId!==user.id) return reply({content:'Only the ticket creator or a server manager can close this ticket.',ephemeral:true}); await db.closeTicket(m?.channelId || i.channelId); await reply({content:`${emoji('success',guild)} Ticket closed. This channel can now be deleted by staff.`}); return; }
+ }
+ return reply({content:`${emoji('warning',guild)} This command is not implemented yet.`,ephemeral:true});
+}
+module.exports = { commandDefs, moduleData, execute, helpPayload };
